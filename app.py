@@ -1,5 +1,5 @@
-from flask import Flask, request, jsonify, render_template, redirect
-from huggingface_hub import InferenceClient
+from flask import Flask, request, jsonify, render_template
+import requests
 from requests.exceptions import RequestException
 import datetime
 import os
@@ -10,12 +10,6 @@ from dotenv import load_dotenv
 # Charger les variables d'environnement
 load_dotenv()
 api_key = os.getenv("HUGGINGFACE_API_KEY")
-
-# Initialisation du client Hugging Face
-client = InferenceClient(
-    model="mistralai/Mistral-7B-Instruct-v0.3",
-    token=api_key
-)
 
 # Créer le dossier logs si nécessaire
 os.makedirs("logs", exist_ok=True)
@@ -50,10 +44,14 @@ def normalize(text):
     text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8')
     return re.sub(r'[^\w\s]', '', text).strip().lower().replace("  ", " ")
 
-# Application Flask
+# Initialiser Flask
 app = Flask(__name__)
 
-# ...
+@app.route("/", methods=["GET"])
+def home():
+    return render_template("index.html")
+
+
 @app.route("/ask", methods=["POST"])
 def ask():
     user_input = request.form.get("message", "").strip()
@@ -74,17 +72,33 @@ def ask():
         return jsonify({"response": matched_response})
 
     try:
-        response = client.text_generation(
-            prompt=f"<s>[INST] Réponds brièvement en français à la question suivante : {user_input} [/INST]",
-            max_new_tokens=150,
-            temperature=0.5,
-            stream=False,
-            timeout=10
-        )
+        # Paramètres de l'API Hugging Face
+        API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3 "
+        headers = {
+            "Authorization": f"Bearer {api_key}"
+        }
+        payload = {
+            "inputs": f"<s>[INST] Réponds brièvement en français à la question suivante : {user_input} [/INST]",
+            "parameters": {
+                "max_new_tokens": 150,
+                "temperature": 0.5,
+                "do_sample": True
+            },
+            "options": {
+                "wait_for_model": True
+            }
+        }
 
-        generated = response.strip()
-        log_conversation(f"Vous: {user_input}\nAssistant: {generated}")
-        return jsonify({"response": generated})
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+
+        if response.status_code == 200:
+            generated = response.json()[0]["generated_text"].strip()
+            log_conversation(f"Vous: {user_input}\nAssistant: {generated}")
+            return jsonify({"response": generated})
+        else:
+            error_msg = f"Erreur API Hugging Face : {response.status_code}, {response.text}"
+            log_conversation(f"Vous: {user_input}\nAssistant: {error_msg}")
+            return jsonify({"error": error_msg})
 
     except RequestException as e:
         error = f"Erreur réseau : {str(e)}"
@@ -97,7 +111,6 @@ def ask():
         return jsonify({"error": error})
 
 
+# Démarrage de l'application
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-if __name__ == "__main__":
-    app.run(port=10000)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
