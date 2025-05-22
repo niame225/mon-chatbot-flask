@@ -48,47 +48,84 @@
             userDiv.textContent = userMessage;
             messageList.appendChild(userDiv);
 
-            // Réinitialiser le champ de saisie
-            input.value = "";
-
             // Scroll automatique
             messageList.scrollTop = messageList.scrollHeight;
 
             // Afficher le loader
             loader.style.display = "block";
 
+            // Créer FormData AVANT de vider le champ input
+            const formData = new FormData();
+            formData.append('message', userMessage);
+
+            // Réinitialiser le champ de saisie APRÈS avoir créé FormData
+            input.value = "";
+
             // Envoyer la requête au serveur
             fetch("/ask", {
                 method: "POST",
-                body: new FormData(form)
+                body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log("Status:", response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
+                console.log("Réponse reçue:", data);
+                
                 // Cacher le loader
                 loader.style.display = "none";
 
                 // Afficher la réponse du bot
                 const botDiv = document.createElement("div");
                 botDiv.className = "message bot";
-                botDiv.textContent = data.response || "Aucune réponse.";
+                
+                if (data.response) {
+                    botDiv.textContent = data.response;
+                } else if (data.error) {
+                    botDiv.textContent = "Erreur: " + data.error;
+                    botDiv.style.color = "orange";
+                } else {
+                    botDiv.textContent = "Aucune réponse reçue.";
+                    botDiv.style.color = "gray";
+                }
+                
                 messageList.appendChild(botDiv);
 
                 // Scroll automatique
                 messageList.scrollTop = messageList.scrollHeight;
             })
             .catch(error => {
-                console.error("Erreur :", error);
+                console.error("Erreur complète:", error);
                 loader.style.display = "none";
 
                 const errorDiv = document.createElement("div");
                 errorDiv.className = "message bot";
                 errorDiv.style.color = "red";
-                errorDiv.textContent = "Une erreur est survenue.";
+                errorDiv.textContent = "Une erreur est survenue: " + error.message;
                 messageList.appendChild(errorDiv);
 
                 messageList.scrollTop = messageList.scrollHeight;
             });
         });
+
+        // Fonction pour tester la connexion
+        function testConnection() {
+            fetch("/test")
+                .then(response => response.json())
+                .then(data => {
+                    console.log("Test de connexion:", data);
+                })
+                .catch(error => {
+                    console.error("Erreur de test:", error);
+                });
+        }
+
+        // Tester la connexion au chargement de la page
+        window.addEventListener("load", testConnection);
     </script>
 </body>
 </html>
