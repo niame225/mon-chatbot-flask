@@ -40,21 +40,27 @@ def ask():
         if not user_input:
             return jsonify({"error": "Aucune question envoyée."}), 400
 
-        # Réponses personnalisées
-        if user_input.lower() in ["bonjour", "salut", "hello"]:
-            response = "Bonjour ! Comment puis-je vous aider ?"
+        # Réponses personnalisées pour les salutations
+        if user_input.lower() in ["bonjour", "salut", "hello", "bonsoir"]:
+            response = "Bonjour ! Comment puis-je vous aider aujourd'hui ?"
         else:
             try:
-                # URL corrigée (suppression de l'espace en trop)
+                # URL de l'API Hugging Face
                 API_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
                 headers = {"Authorization": f"Bearer {api_key}"}
                 
+                # Format de prompt corrigé pour Zephyr
+                prompt = f"<|system|>\nTu es un assistant francophone utile et bienveillant. Réponds directement et clairement aux questions en français.</s>\n<|user|>\n{user_input}</s>\n<|assistant|>\n"
+                
                 payload = {
-                    "inputs": f"[INST] Réponds en français : {user_input} [/INST]",
+                    "inputs": prompt,
                     "parameters": {
-                        "max_new_tokens": 100,
+                        "max_new_tokens": 150,
                         "temperature": 0.7,
-                        "return_full_text": False
+                        "do_sample": True,
+                        "top_p": 0.9,
+                        "return_full_text": False,
+                        "stop": ["</s>", "<|user|>", "<|system|>"]
                     }
                 }
 
@@ -62,27 +68,38 @@ def ask():
                 resp = requests.post(API_URL, headers=headers, json=payload, timeout=30)
                 
                 logging.info(f"Status code: {resp.status_code}")
-                logging.info(f"Réponse brute: {resp.text}")
                 
                 resp.raise_for_status()
-
                 response_data = resp.json()
                 
-                # Vérifier si la réponse est dans le bon format
+                # Traitement de la réponse
                 if isinstance(response_data, list) and len(response_data) > 0:
                     generated_text = response_data[0].get("generated_text", "")
+                elif isinstance(response_data, dict):
+                    generated_text = response_data.get("generated_text", "")
                 else:
                     generated_text = str(response_data)
 
-                # Nettoyer la réponse
-                if "[/INST]" in generated_text:
-                    response = generated_text.split("[/INST]")[-1].strip()
-                else:
-                    response = generated_text.strip()
+                # Nettoyage de la réponse
+                response = generated_text.strip()
+                
+                # Supprimer les balises résiduelles si présentes
+                for tag in ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]:
+                    response = response.replace(tag, "")
+                
+                # Supprimer les préfixes indésirables
+                prefixes_to_remove = ["[/INST]", "[INST]", "[/USER]", "[USER]", "[/ASSISTANT]", "[ASSISTANT]"]
+                for prefix in prefixes_to_remove:
+                    if response.startswith(prefix):
+                        response = response[len(prefix):].strip()
 
-                # Si la réponse est vide, donner une réponse par défaut
-                if not response:
-                    response = "Je n'ai pas pu générer une réponse appropriée."
+                # Si la réponse est vide ou trop courte, donner une réponse par défaut
+                if not response or len(response.strip()) < 3:
+                    response = "Je n'ai pas pu générer une réponse appropriée à votre question."
+
+                # Limiter la longueur de la réponse si elle est trop longue
+                if len(response) > 500:
+                    response = response[:500] + "..."
 
             except requests.exceptions.Timeout:
                 logging.error("Timeout lors de la requête à Hugging Face")

@@ -4,7 +4,186 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chatbot Francophone</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 15px 15px 0 0;
+        }
+
+        .chat-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .message-list {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 18px;
+            max-width: 80%;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .message.user {
+            background: #2196F3;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.bot {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .input-form {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-form input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-form input:focus {
+            border-color: #2196F3;
+        }
+
+        .input-form button {
+            padding: 12px 24px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .input-form button:hover {
+            background: #1976D2;
+        }
+
+        .input-form button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .loader-spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #2196F3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .error-message {
+            color: #d32f2f !important;
+            background: #ffebee !important;
+            border-color: #ffcdd2 !important;
+        }
+
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #999;
+            animation: typing 1.4s infinite ease-in-out both;
+        }
+
+        .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                height: 90vh;
+                margin: 10px;
+            }
+            
+            .message {
+                max-width: 90%;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="chat-container">
@@ -12,20 +191,18 @@
             <h1>💬 Chatbot Francophone</h1>
         </header>
 
-        <!-- Loader -->
-        <div id="loader" style="display: none; text-align: center;">
-            <div class="loader-spinner"></div>
-        </div>
-
         <!-- Liste des messages -->
         <div class="message-list" id="message-list">
-            <!-- Les messages seront ajoutés ici dynamiquement -->
+            <!-- Message de bienvenue -->
+            <div class="message bot">
+                Bonjour ! Je suis votre assistant francophone. Comment puis-je vous aider aujourd'hui ?
+            </div>
         </div>
 
         <!-- Formulaire d'entrée -->
         <form id="chat-form" class="input-form">
             <input type="text" id="user-input" name="message" placeholder="Pose ta question ici..." required>
-            <button type="submit">Envoyer</button>
+            <button type="submit" id="send-button">Envoyer</button>
         </form>
     </div>
 
@@ -34,31 +211,31 @@
         const form = document.getElementById("chat-form");
         const input = document.getElementById("user-input");
         const messageList = document.getElementById("message-list");
-        const loader = document.getElementById("loader");
+        const sendButton = document.getElementById("send-button");
+
+        let isProcessing = false;
 
         form.addEventListener("submit", function(event) {
-            event.preventDefault(); // Empêche le rechargement
+            event.preventDefault();
 
             const userMessage = input.value.trim();
-            if (!userMessage) return;
+            if (!userMessage || isProcessing) return;
+
+            isProcessing = true;
+            sendButton.disabled = true;
+            sendButton.textContent = "...";
 
             // Afficher le message utilisateur
-            const userDiv = document.createElement("div");
-            userDiv.className = "message user";
-            userDiv.textContent = userMessage;
-            messageList.appendChild(userDiv);
+            addMessage(userMessage, 'user');
 
-            // Scroll automatique
-            messageList.scrollTop = messageList.scrollHeight;
+            // Afficher l'indicateur de saisie
+            const typingIndicator = addTypingIndicator();
 
-            // Afficher le loader
-            loader.style.display = "block";
-
-            // Créer FormData AVANT de vider le champ input
+            // Créer FormData
             const formData = new FormData();
             formData.append('message', userMessage);
 
-            // Réinitialiser le champ de saisie APRÈS avoir créé FormData
+            // Réinitialiser le champ de saisie
             input.value = "";
 
             // Envoyer la requête au serveur
@@ -69,48 +246,81 @@
             .then(response => {
                 console.log("Status:", response.status);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(`Erreur serveur: ${response.status}`);
                 }
                 return response.json();
             })
             .then(data => {
                 console.log("Réponse reçue:", data);
                 
-                // Cacher le loader
-                loader.style.display = "none";
+                // Supprimer l'indicateur de saisie
+                removeTypingIndicator(typingIndicator);
 
                 // Afficher la réponse du bot
-                const botDiv = document.createElement("div");
-                botDiv.className = "message bot";
-                
                 if (data.response) {
-                    botDiv.textContent = data.response;
+                    addMessage(data.response, 'bot');
                 } else if (data.error) {
-                    botDiv.textContent = "Erreur: " + data.error;
-                    botDiv.style.color = "orange";
+                    addMessage("Erreur: " + data.error, 'bot error');
                 } else {
-                    botDiv.textContent = "Aucune réponse reçue.";
-                    botDiv.style.color = "gray";
+                    addMessage("Aucune réponse reçue.", 'bot error');
                 }
-                
-                messageList.appendChild(botDiv);
-
-                // Scroll automatique
-                messageList.scrollTop = messageList.scrollHeight;
             })
             .catch(error => {
-                console.error("Erreur complète:", error);
-                loader.style.display = "none";
-
-                const errorDiv = document.createElement("div");
-                errorDiv.className = "message bot";
-                errorDiv.style.color = "red";
-                errorDiv.textContent = "Une erreur est survenue: " + error.message;
-                messageList.appendChild(errorDiv);
-
-                messageList.scrollTop = messageList.scrollHeight;
+                console.error("Erreur:", error);
+                
+                // Supprimer l'indicateur de saisie
+                removeTypingIndicator(typingIndicator);
+                
+                addMessage("Une erreur est survenue. Veuillez réessayer.", 'bot error');
+            })
+            .finally(() => {
+                isProcessing = false;
+                sendButton.disabled = false;
+                sendButton.textContent = "Envoyer";
+                input.focus();
             });
         });
+
+        function addMessage(text, type) {
+            const messageDiv = document.createElement("div");
+            messageDiv.className = `message ${type}`;
+            
+            if (type.includes('error')) {
+                messageDiv.classList.add('error-message');
+            }
+            
+            messageDiv.textContent = text;
+            messageList.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function addTypingIndicator() {
+            const typingDiv = document.createElement("div");
+            typingDiv.className = "message bot typing-indicator";
+            typingDiv.innerHTML = `
+                <span>Assistant écrit</span>
+                <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            `;
+            messageList.appendChild(typingDiv);
+            scrollToBottom();
+            return typingDiv;
+        }
+
+        function removeTypingIndicator(indicator) {
+            if (indicator && indicator.parentNode) {
+                indicator.parentNode.removeChild(indicator);
+            }
+        }
+
+        function scrollToBottom() {
+            setTimeout(() => {
+                messageList.scrollTop = messageList.scrollHeight;
+            }, 100);
+        }
 
         // Fonction pour tester la connexion
         function testConnection() {
@@ -124,8 +334,19 @@
                 });
         }
 
+        // Focus automatique sur le champ de saisie
+        input.focus();
+
         // Tester la connexion au chargement de la page
         window.addEventListener("load", testConnection);
+
+        // Gestion de la touche Entrée
+        input.addEventListener("keypress", function(event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                form.dispatchEvent(new Event('submit'));
+            }
+        });
     </script>
 </body>
 </html>
